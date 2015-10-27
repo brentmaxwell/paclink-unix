@@ -879,6 +879,8 @@ wl2kexchange(char *mycall, char *yourcall, FILE *ifp, FILE *ofp, char *emailaddr
     print_log(LOG_DEBUG, "<%s", line);
     if (strbegins(line, ";")) {
       /* do nothing */
+    } else if (strbegins(line, "Hello")) {
+      /* do nothing */
     } else if (strlen(line) == 0) {
       /* do nothing */
     } else if (strbegins(line, "FC")) {
