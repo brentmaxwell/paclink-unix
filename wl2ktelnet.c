@@ -189,6 +189,8 @@ main(int argc, char *argv[])
     printf("%s\n", line);
     if (strncmp("Password", line, 8) == 0) {
       fprintf(fp, "%s\r\n", cfg.password);
+	  printf("PW %s\r\n", cfg.mypassword);
+	  fprintf(fp, "PW %s\r\n", cfg.mypassword);
       break;
     }
   }
@@ -196,17 +198,6 @@ main(int argc, char *argv[])
     fprintf(stderr, "Connection closed by foreign host.\n");
     exit(EXIT_FAILURE);
   }
-  
-  while ((line = wl2kgetline(fp)) != NULL) {
-    printf("%s\n", line);
-	fprintf(fp, "PW %s\r\n", cfg.mypassword);
-	break;
-  }
-  if (line == NULL) {
-    fprintf(stderr, "Connection closed by foreign host.\n");
-    exit(EXIT_FAILURE);
-  }
-  
   
 
   wl2kexchange(cfg.mycall, cfg.targetcall, fp, fp, cfg.emailaddr);
