@@ -84,6 +84,7 @@ int gverbose_flag=FALSE;
  */
 typedef struct _wl2ktelnet_config {
   char *mycall;
+  char *mypassword;
   char *targetcall;
   char *hostname;
   unsigned short  hostport;
@@ -195,6 +196,20 @@ main(int argc, char *argv[])
     fprintf(stderr, "Connection closed by foreign host.\n");
     exit(EXIT_FAILURE);
   }
+  
+  while ((line = wl2kgetline(fp)) != NULL) {
+    printf("%s\n", line);
+    if (strncmp(">", line, 1) == 0) {
+      fprintf(fp, "PW %s\r\n", cfg.mypassword);
+      break;
+    }
+  }
+  if (line == NULL) {
+    fprintf(stderr, "Connection closed by foreign host.\n");
+    exit(EXIT_FAILURE);
+  }
+  
+  
 
   wl2kexchange(cfg.mycall, cfg.targetcall, fp, fp, cfg.emailaddr);
 
@@ -251,6 +266,10 @@ displayconfig(cfg_t *cfg)
 
   if(cfg->mycall) {
     printf("  My callsign: %s\n", cfg->mycall);
+  }
+  
+  if(cfg->mypassword) {
+    printf("  WL2K password: %s\n", cfg->mypassword);
   }
 
   if(cfg->targetcall) {
@@ -336,6 +355,7 @@ loadconfig(int argc, char **argv, cfg_t *config)
   free(cfgbuf);
 
   config->mycall = NULL;
+  config->mypassword = NULL;
   config->timeoutsecs = DFLT_TIMEOUTSECS;
   config->hostport = DFLT_TELNET_PORT;
   config->bVerbose = FALSE;
@@ -347,6 +367,11 @@ loadconfig(int argc, char **argv, cfg_t *config)
   fileconf = conf_read();
   if ((config->mycall = conf_get(fileconf, "mycall")) == NULL) {
     fprintf(stderr, "%s: failed to read mycall from configuration file\n", getprogname());
+    exit(EXIT_FAILURE);
+  }
+  
+  if ((config->mypassword = conf_get(fileconf, "mypassword")) == NULL) {
+    fprintf(stderr, "%s: failed to read mypassword from configuration file\n", getprogname());
     exit(EXIT_FAILURE);
   }
 
