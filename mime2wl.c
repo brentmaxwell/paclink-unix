@@ -33,7 +33,7 @@
 #endif
 
 #ifdef __RCSID
-__RCSID("$Id: mime2wl.c,v 1.35 2010/05/04 19:13:37 basilgunn Exp $");
+__RCSID("$Id: mime2wl.c,v 1.38 2010/11/15 00:05:25 basilgunn Exp $");
 #endif
 
 #if TIME_WITH_SYS_TIME
@@ -87,6 +87,7 @@ struct wl2kmessage {
 static unsigned int roundup_np2(unsigned int v);
 static char *mbo_header(char *from_mheader, const char *callsign);
 static char *address_cleanup(const char *addr);
+static char *parse_winlink_address(char *addr);
 static GMimeMessage *parse_message(int fd);
 static void mime_foreach_callback(GMimeObject *parent, GMimeObject *part, gpointer user_data);
 
@@ -107,6 +108,51 @@ static unsigned int roundup_np2(unsigned int v)
   v++;
 
   return(v);
+}
+
+static char *
+parse_winlink_address(char *addr)
+{
+  char *atptr;
+  char *pmh_mbo;
+  size_t memsize;
+
+  /* How much memory to malloc -
+   * +6 for 'SMTP:' and terminating null */
+  memsize = strlen(addr)+6;
+
+  /* Always make small memory allocations power of 2 */
+  memsize = roundup_np2(memsize);
+
+  /* Get the memory & initialize it */
+  pmh_mbo = (char *)calloc(memsize, 1);
+
+  /* Did we get the memory? */
+  if(pmh_mbo == NULL) {
+    syslog(LOG_ERR, "mbo_header: memory alloc error\n");
+    return NULL;
+  }
+
+  /* Get pointer to at sign in 'from:' header */
+  atptr = strchr(addr, '@');
+
+  /* check for an '@' & some string following */
+  if (atptr && strlen(atptr+1)) {
+    /* If the domain name is NOT 'winlink' then set mbo to
+     * SMTP:from@somedomain */
+    if(strncasecmp(atptr+1, "winlink", 7)) {
+      strncat(pmh_mbo, addr, (size_t)MIN(strlen(addr), memsize-6) );
+    } else {
+      /* if the domain name IS 'winlink' then set mbo to string
+       * in front of at sign */
+      strncpy(pmh_mbo, addr, (size_t)MIN((size_t)(atptr-addr), memsize-1) );
+    }
+  } else {
+    /* if there is no '@' then just set mbo to mail header 'from' string */
+    strncpy(pmh_mbo, addr, (size_t)MIN((size_t)(atptr-addr), memsize-1) );
+  }
+
+  return(pmh_mbo);
 }
 
 /*
@@ -135,7 +181,7 @@ mbo_header(char *mh_from, const char *callsign)
   /* Get the memory & initialize it */
   pmh_mbo = (char *)calloc(memsize, 1);
 
-	/* Did we get the memory? */
+  /* Did we get the memory? */
   if(pmh_mbo == NULL) {
     syslog(LOG_ERR, "mbo_header: memory alloc error\n");
     return NULL;
@@ -166,7 +212,8 @@ mbo_header(char *mh_from, const char *callsign)
     /* if there is no '@' then just set mbo to mail header 'from' string */
     strncpy(pmh_mbo, mh_from, (size_t)MIN((size_t)(atptr-mh_from), memsize-1) );
   }
-
+	  syslog(LOG_WARNING, "mbo_header: callsign [%s]\n",
+               callsign);
   return(pmh_mbo);
 }
 
@@ -434,7 +481,7 @@ mime2wl(int fd, const char *callsign, bool bRecMid)
   buffer_addstring(wl2k.hbuf, "Type: Private\r\n");
 
   header = g_mime_message_get_sender(message);
-  mheader_from = address_cleanup(header);
+  mheader_from = parse_winlink_address(address_cleanup(header));
   buffer_addstring(wl2k.hbuf, "From: ");
   if (strchr(mheader_from, '@')) {
     buffer_addstring(wl2k.hbuf, "SMTP:");
@@ -446,7 +493,7 @@ mime2wl(int fd, const char *callsign, bool bRecMid)
   idx = 0;
   while ((ia = internet_address_list_get_address(ial, idx)) != NULL) {
     header = internet_address_to_string(ia, 0);
-    clean = address_cleanup(header);
+    clean = parse_winlink_address(address_cleanup(header));
     buffer_addstring(wl2k.hbuf, "To: ");
     if (strchr(clean, '@')) {
       buffer_addstring(wl2k.hbuf, "SMTP:");
@@ -461,8 +508,23 @@ mime2wl(int fd, const char *callsign, bool bRecMid)
   idx = 0;
   while ((ia = internet_address_list_get_address(ial, idx)) != NULL) {
     header = internet_address_to_string(ia, 0);
-    clean = address_cleanup(header);
+    clean = parse_winlink_address(address_cleanup(header));
     buffer_addstring(wl2k.hbuf, "Cc: ");
+    if (strchr(clean, '@')) {
+      buffer_addstring(wl2k.hbuf, "SMTP:");
+    }
+    buffer_addstring(wl2k.hbuf, clean);
+    buffer_addstring(wl2k.hbuf, "\r\n");
+    free(clean);
+    idx++;
+  }
+
+  ialp = ial = g_mime_message_get_recipients(message, GMIME_RECIPIENT_TYPE_BCC);
+  idx = 0;
+  while ((ia = internet_address_list_get_address(ial, idx)) != NULL) {
+    header = internet_address_to_string(ia, 0);
+    clean = parse_winlink_address(address_cleanup(header));
+    buffer_addstring(wl2k.hbuf, "Bcc: ");
     if (strchr(clean, '@')) {
       buffer_addstring(wl2k.hbuf, "SMTP:");
     }
@@ -477,14 +539,21 @@ mime2wl(int fd, const char *callsign, bool bRecMid)
   buffer_addstring(wl2k.hbuf, header);
   buffer_addstring(wl2k.hbuf, "\r\n");
 
+  header = g_mime_message_get_reply_to(message);
+  if(header != NULL) {
+    buffer_addstring(wl2k.hbuf, "Reply-To: ");
+    buffer_addstring(wl2k.hbuf, header);
+    buffer_addstring(wl2k.hbuf, "\r\n");
+  }
+
   mheader_mbo = mbo_header(mheader_from, callsign);
   buffer_addstring(wl2k.hbuf, "Mbo: ");
   buffer_addstring(wl2k.hbuf, mheader_mbo);
   buffer_addstring(wl2k.hbuf, "\r\n");
   if(mheader_from)
-	  free(mheader_from);
+    free(mheader_from);
   if(mheader_mbo)
-	  free(mheader_mbo);
+    free(mheader_mbo);
 
   g_mime_message_foreach(message, mime_foreach_callback, &wl2k);
 
@@ -585,3 +654,4 @@ main(int argc, char *argv[])
   return 1;
 }
 #endif
+
