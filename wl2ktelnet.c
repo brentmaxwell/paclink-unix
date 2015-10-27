@@ -199,7 +199,7 @@ main(int argc, char *argv[])
   
   while ((line = wl2kgetline(fp)) != NULL) {
     printf("%s\n", line);
-    if (strncmp(">", line, 1) == 0) {
+    if (strrchr(line, ">") == strlen(line)) {
       fprintf(fp, "PW %s\r\n", cfg.mypassword);
       break;
     }
