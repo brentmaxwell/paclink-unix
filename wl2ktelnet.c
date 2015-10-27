@@ -199,10 +199,8 @@ main(int argc, char *argv[])
   
   while ((line = wl2kgetline(fp)) != NULL) {
     printf("%s\n", line);
-    if (strncmp(">", line, 1) == 0) {
-      fprintf(fp, "PW %s\r\n", cfg.mypassword);
-      break;
-    }
+	fprintf(fp, "PW %s\r\n", cfg.mypassword);
+	break;
   }
   if (line == NULL) {
     fprintf(stderr, "Connection closed by foreign host.\n");
